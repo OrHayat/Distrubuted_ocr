@@ -1,0 +1,117 @@
+Abstract
+In this assignment you will code a real-world application to distributively apply OCR algorithms on images. Then you will display each image with its recognized text on a webpage.
+More Details
+The application is composed of a local application and instances running in the Amazon cloud. The application will get as an input a text file containing a list of URLs of images. Then, instances will be launched in AWS (workers). Each worker will download image files, use some OCR library to identify text in those images (if any) and display the image with the text in a webpage.
+A sample input file here.
+A sample output file here.
+A big input file here.
+The use-case is as follows:
+
+User starts the application and supplies as input a file with URLs of image files and an integer n stating how many image files per worker.
+User gets back an html file with images and their text.
+
+The assignment must be submitted via the submission system. You should submit a zip file containing all the files you wrote in the assignment, without adding external libraries. Instead state their names and to the place where you've downloaded them.
+System Architecture
+The system is composed of 3 elements:
+Local application
+Manager
+Workers
+The elements will communicate with each other using a queue (SQS) and storage (S3).
+Local Application
+The application resides on a local (non-cloud) machine. Once started, it reads the filename containing the image files from the user. It then:
+Checks if a Manager node is active on the EC2 cloud. If it is not, the application will start the manager node.
+The application will upload the file with the list of images to S3.
+The application will send a message to a specified SQS queue, stating the location of the images list on S3
+The application will check a specified SQS queue for a message indicating the process is done and the response is available on S3.
+The application will download the response from S3.
+The Manager
+The manager process resides on an EC2 node. It checks a special SQS queue for a message indicating an images list is waiting on S3. Once it receives the message it:
+Downloads the images list from S3.
+creates an SQS message for each URL in the images list.
+Checks the SQS message count and starts Worker processes (nodes) accordingly.
+The manager should create a worker for every n messages.
+The manager should turn off all the workers when there is no more work to be done (0 messages).
+Note that while the manager creates a node for every n messages, it does not delegate messages to specific nodes. All of the worker nodes take their messages from the same SQS queue, so it might be the case that with 2n messages and hence two worker nodes, one node processed n+(n/2) messages, while the other processed only n/2.
+Once the images queue count is 0, manager should read all the messages from the results queue, create the output file accordingly, upload the output file to S3, and send a message to the user queue with the location of the file.
+The Workers
+A worker process resides on an EC2 nodes. Its life cycle as follows:
+Repeatedly:
+
+Get an image message from an SQS queue.
+Download the image file indicated in the message.
+Apply OCR on the image.
+Notify the manager of the text associated with that image.
+remove the image message from the SQS queue.
+The Queues and Messages
+As described above, queues are used for:
+communication between local application and manager.
+communication between manager and workers.
+
+Specifically, we will have the following messages:
+new task message from application to manager (location of a URL list of images)
+new image task message from Manager to Worker (URL of a specific image)
+done image task message from Worker to Manager (URL of image and identified text)
+done task message from Manager to application (S3 location of the output file)
+
+It is up to you to decide how many queues you want (you can have different queues for different tasks, or one queue, whatever you find most convenient).
+Running the application, Input and Output file formats
+The application should be run as follows:
+java -jar yourjar.jar inputFileName n
+where:
+
+inputFileName is the name of the input file outputFileName is the name of the output file n is workers - files ratio (how many images per worker)
+
+The input file is a list of URLs, one URL per line.
+
+The output is an html file, containing the result images with links to the original images.
+
+System Summary
+
+Local Application uploads the file with the list of images to S3
+Local Application sends a message (queue) stating of the location of the images list on S3
+Local Application does one of the two:
+Starts the manager
+Checks if a manager is active and if not, starts it
+Manager downloads list of images
+Manager creates an SQS message for each URL in the list of images
+Manager bootstraps nodes to process messages
+Worker gets an image message from an SQS queue
+Worker downloads the image indicated in the message
+Worker applies OCR on image.
+Worker puts a message in an SQS queue indicating the original URL of the image and the text.
+Manager reads all the Workers' messages from SQS and creates one summary file
+Manager uploads summary file to S3
+Manager posts an SQS message about summary file
+Local Application reads SQS message
+Local Application downloads summary file from S3
+Local Application creates html output files
+Technical Stuff
+Which AMI image to use?
+You can choose whatever image you want. You probably want to have one which has java installed, and which supports user-data. If you don't want to choose on your own, you can just use that one: ami-76f0061f
+The AWS SDK
+If you wish to write the assignment in Java, you'll need the SDK for Java for it. We advise you to read the Getting Started guide and get comfortable with the SDK. You may use 3rd party Java clients for AWS, such as this or this.
+You can also write it in Python, or combinations like, workers in Python but manger in Java.
+
+Bootstrapping
+When you create and boot up an EC2 node, it turns on with a specified image, and that's it. You need to load it with software and run the software in order for it to do something useful. We refer to this as "bootstrapping" the machine.
+The boostrapping process should download .jar files from an S3 bucket and run them. In order to do that, you need a way to pass instructions to a new node. You can do that using this guide, and another guide. User-data allows you to pass a shell-script to the machine, to be run when it starts up. Notice that the script you're passing should be encoded to base64. Here's a code example of how to do that.
+
+If you use an AMI without Java or the AWS SDK for Java, you will need to download and install them via the bootstrap script.
+
+Downloading from the console: In Linux, the command wget is usually installed. You can use it to download web files from the commandline.
+
+Example: wget http://www.cs.bgu.ac.il/~dsp132/Main -O dsp.html will download the content at http://www.cs.bgu.ac.il/~dsp132/Main and save it to a file named dsp.html. wget man
+
+Installing from the console: In Ubuntu (or Debian) Linux, you can use the apt-get command (assuming you have root access to the machine). Example: apt-get install wget will install the wget command if it is not installed. You can use it to install Java, or other packages. apt-get man
+
+shell scripting with bash: your user-data scripts can be written in any language you want (e.g. Python, Perl, tsch, bash). bash is a very common choice. Your scripts are going to be very simple. Nonetheless, you might find these bash tutorials useful.
+
+Tips on downloading images using Java
+Reading URLs, Writing Files. However, note that image files are binary (not text) files, so you probably don't want to use .readline() as in the code there.
+OCR
+Fortunately, you don't have to write an OCR algorithm by yourself, but rather use an already implemented and tested one in an existing library called JavaOCR. Alternatively, you can use other libraries if you like. It's up to you. Some students used Asprise. Others use Tesseract.
+Notes
+Cloud services are cheap but not free. Even if they were free, waste is bad. Therefore, please keep in mind that:
+It shoud be possible for you to easily remove all the things you put on S3. You can do that by putting them in a specified bucket, which you could delete later.
+Note that no one in the process is in charge of turning off the Manager node. Make sure to turn it off yourself once you are done with it.
+While it is the Manager's job to turn of all the Worker nodes, do verify yourself that all the nodes really did shut down.
