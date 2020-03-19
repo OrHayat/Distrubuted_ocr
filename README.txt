@@ -1,4 +1,3 @@
-Distrubuted_ocr:
 1. Instructions how to run the project.
 2. Explanations
 3. Security
