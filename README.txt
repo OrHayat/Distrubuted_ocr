@@ -1,11 +1,3 @@
-﻿****************************************************************
- Distrebuted System Programming 2019 
-Assignment 1
-
-or hayat 312198377
-zoharith hadad 312211162
-****************************************************************
-
 
 1. Instructions how to run the project.
 2. Explanations
